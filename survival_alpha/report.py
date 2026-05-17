@@ -2,7 +2,6 @@
 
 from rich import box
 from rich.align import Align
-from rich.columns import Columns
 from rich.console import Console
 from rich.panel import Panel
 from rich.rule import Rule
@@ -10,7 +9,7 @@ from rich.table import Table
 from rich.text import Text
 
 from survival_alpha.branding import (
-    AMBER, GREEN, LOGO, PINK, PINK_DIM, RED, TAGLINE_LONG, TEAL, TEAL_DIM, subtitle,
+    AMBER, GREEN, LOGO, PINK, RED, TAGLINE_LONG, TEAL, TEAL_DIM, subtitle,
 )
 
 
@@ -26,9 +25,15 @@ def _fmt_pct(x, places=2):
 
 
 def _fmt_usd(x):
-    if abs(x) >= 1_000_000:
+    """Currency with K / M / B / T abbreviations and thousands separators."""
+    ax = abs(x)
+    if ax >= 1_000_000_000_000:
+        return f"${x/1_000_000_000_000:,.2f}T"
+    if ax >= 1_000_000_000:
+        return f"${x/1_000_000_000:,.2f}B"
+    if ax >= 1_000_000:
         return f"${x/1_000_000:,.2f}M"
-    if abs(x) >= 1_000:
+    if ax >= 1_000:
         return f"${x/1_000:,.2f}K"
     return f"${x:,.0f}"
 
@@ -73,7 +78,7 @@ def _perf_panel(m):
         ("Sortino",            f"{m['sortino']:,.2f}",         "bold white"),
         ("Calmar",             f"{m['calmar']:,.2f}",          "bold white"),
         ("Max drawdown",       _fmt_pct(m["max_dd"]),          f"bold {RED}"),
-        ("Max intra-trade DD", _fmt_pct(m["max_intra_trade_dd"]), f"bold {RED}"),
+        ("Worst trade MAE",   _fmt_pct(m["worst_trade_mae"]),    f"bold {RED}"),
         ("Annual volatility",  _fmt_pct(m["annual_vol"]),         "white"),
         ("Time in market",     _fmt_pct(m["time_in_market"], 1), "white"),
     ]
@@ -126,10 +131,14 @@ def _footer(console):
     console.print()
     note = Text()
     note.append("Note  ", style=f"dim {TEAL}")
+    basis = ""
+    # If the metrics dict carries the basis we used, surface it.
+    # Falls back gracefully when called without it.
     note.append(
-        "Sharpe/Sortino derived from a pro-rata daily equity curve. "
-        "Upgrade to Mode 2 (signal + price series) for higher-fidelity "
-        "metrics including true repaint detection.\n",
+        "Sharpe, Sortino, and Annual volatility are derived from a pro-rata daily "
+        "equity curve, which structurally smooths intra-trade volatility. "
+        "Upgrade to Mode 2 (signal + price series) for higher-fidelity numbers "
+        "and true repaint detection.\n",
         style="dim italic",
     )
     console.print(note)

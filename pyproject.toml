@@ -36,3 +36,16 @@ survival-alpha = "survival_alpha.cli:cli"
 
 [tool.setuptools.packages.find]
 include = ["survival_alpha*"]
+
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-ra -q"

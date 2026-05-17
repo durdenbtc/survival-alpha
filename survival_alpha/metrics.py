@@ -4,8 +4,42 @@ import numpy as np
 import pandas as pd
 
 
-TRADING_DAYS_PER_YEAR = 252
+DEFAULT_ANNUALIZATION = 252       # stock convention (kept for backward compat)
 CALENDAR_DAYS_PER_YEAR = 365.25
+
+ANNUALIZATION_PRESETS = {
+    "stocks": 252,
+    "stock": 252,
+    "equities": 252,
+    "equity": 252,
+    "crypto": 365,
+    "btc": 365,
+    "fx": 252,
+    "forex": 252,
+    "futures": 252,
+}
+
+
+def resolve_annualization(val):
+    """Resolve a user-supplied annualization arg to an int trading-days-per-year.
+
+    Accepts:
+      - preset strings like 'stocks', 'crypto'
+      - integer-like strings ('252', '365')
+      - already-int values
+    """
+    if isinstance(val, int):
+        return val
+    s = str(val).lower().strip()
+    if s in ANNUALIZATION_PRESETS:
+        return ANNUALIZATION_PRESETS[s]
+    try:
+        return int(s)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"Invalid annualization '{val}'. Use a preset "
+            f"({sorted(set(ANNUALIZATION_PRESETS.values()))}) or an integer."
+        )
 
 
 def estimate_initial_capital(trades):
@@ -18,13 +52,18 @@ def estimate_initial_capital(trades):
 
     Fallbacks: first non-zero size_value -> TradingView default of 10000.
     """
-    for _, row in trades.iterrows():
+    # Walk from the LATEST trade backwards. Later rows have huge cumulative
+    # magnitudes, so rounding in cum_usd / cum_pct is negligible. Early rows
+    # can have small magnitudes where TV's 2-decimal rounding introduces
+    # noticeable error in the implied capital.
+    for _, row in trades.iloc[::-1].iterrows():
         cum_usd = row.get("cum_pnl_usd")
         cum_pct = row.get("cum_pnl_pct")
         if pd.notna(cum_usd) and pd.notna(cum_pct) and cum_pct != 0:
             cap = float(cum_usd) / (float(cum_pct) / 100.0)
             if cap > 0:
                 return cap
+    # Fallback: first non-zero size_value
     for _, row in trades.iterrows():
         sv = row.get("size_value")
         if pd.notna(sv) and float(sv) > 0:
@@ -64,11 +103,11 @@ def build_daily_equity_curve(trades):
     return equity
 
 
-def _sharpe(daily_returns):
+def _sharpe(daily_returns, days_per_year):
     s = daily_returns.std()
     if not s or s <= 0:
         return 0.0
-    return float(daily_returns.mean() / s * np.sqrt(TRADING_DAYS_PER_YEAR))
+    return float(daily_returns.mean() / s * np.sqrt(days_per_year))
 
 
 def compute_max_drawdown(trades, initial_capital):
@@ -113,11 +152,11 @@ def compute_max_drawdown(trades, initial_capital):
     return float(dd.min())
 
 
-def _sortino(daily_returns):
-    """Standard Sortino: mean / downside_deviation * sqrt(252).
+def _sortino(daily_returns, days_per_year):
+    """Standard Sortino: mean / downside_deviation * sqrt(days_per_year).
 
     Downside deviation = sqrt(mean(min(0, r)^2)) -- zero-padded for
-    positive returns. This is the textbook formula (e.g. Sortino & Price 1994).
+    positive returns. Textbook formula (Sortino & Price 1994).
     """
     if len(daily_returns) == 0:
         return 0.0
@@ -125,11 +164,21 @@ def _sortino(daily_returns):
     ddev = float(np.sqrt(np.mean(downside ** 2)))
     if ddev <= 0:
         return 0.0
-    return float(daily_returns.mean() / ddev * np.sqrt(TRADING_DAYS_PER_YEAR))
+    return float(daily_returns.mean() / ddev * np.sqrt(days_per_year))
 
 
-def compute_metrics(trades):
-    """Return a dict of headline metrics for a trade DataFrame."""
+def compute_metrics(trades, annualization="stocks"):
+    """Return a dict of headline metrics for a trade DataFrame.
+
+    Parameters
+    ----------
+    trades : pd.DataFrame
+        Normalized trade list (see loaders.load_tradingview_csv).
+    annualization : str or int, default "stocks"
+        Trading days per year used to annualize Sharpe, Sortino, and Annual
+        volatility. Presets: "stocks" (252), "crypto" (365). Integer also OK.
+    """
+    days_per_year = resolve_annualization(annualization)
     equity = build_daily_equity_curve(trades)
     daily_returns = equity.pct_change().dropna()
     start_date = trades["entry_date"].min()
@@ -138,9 +187,9 @@ def compute_metrics(trades):
     final_equity = float(equity.iloc[-1]) if len(equity) else 1.0
     total_return = final_equity - 1.0
     cagr = final_equity ** (1 / years) - 1 if final_equity > 0 else -1.0
-    sharpe = _sharpe(daily_returns)
-    sortino = _sortino(daily_returns)
-    annual_vol = float(daily_returns.std() * np.sqrt(TRADING_DAYS_PER_YEAR)) if len(daily_returns) else 0.0
+    sharpe = _sharpe(daily_returns, days_per_year)
+    sortino = _sortino(daily_returns, days_per_year)
+    annual_vol = float(daily_returns.std() * np.sqrt(days_per_year)) if len(daily_returns) else 0.0
     initial_cap = estimate_initial_capital(trades)
     max_dd = compute_max_drawdown(trades, initial_cap)
     calmar = cagr / abs(max_dd) if max_dd < 0 else 0.0
@@ -160,16 +209,17 @@ def compute_metrics(trades):
     gross_wins = float(wins["pnl_usd"].sum())
     gross_losses = float(abs(losses["pnl_usd"].sum()))
     profit_factor = gross_wins / gross_losses if gross_losses > 0 else float("inf")
-    max_intra_trade_dd = float(trades["mae_pct"].min()) / 100 if n_trades else 0.0
+    worst_trade_mae = float(trades["mae_pct"].min()) / 100 if n_trades else 0.0
     return {
         "start_date": start_date, "end_date": end_date, "years": years,
         "initial_equity": 1.0, "final_equity": final_equity,
         "total_return": total_return, "cagr": cagr,
         "sharpe": sharpe, "sortino": sortino, "calmar": float(calmar), "annual_vol": annual_vol,
-        "max_dd": max_dd, "max_intra_trade_dd": max_intra_trade_dd,
+        "max_dd": max_dd, "worst_trade_mae": worst_trade_mae,
+        "annualization_basis": days_per_year,
         "time_in_market": tim, "n_trades": n_trades, "win_rate": win_rate,
         "expectancy_usd": expectancy, "profit_factor": profit_factor,
         "avg_win_usd": avg_win, "avg_loss_usd": avg_loss,
         "largest_win_usd": largest_win, "largest_loss_usd": largest_loss,
-        "avg_duration_days": avg_duration, "equity_curve": equity,
+        "avg_duration_days": avg_duration,
     }

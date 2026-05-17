@@ -24,8 +24,15 @@ DEFAULT_DATA_DIR = "data"
     default=DEFAULT_DATA_DIR,
     help=f"Folder to scan for trade logs when no file is given (default: ./{DEFAULT_DATA_DIR}/).",
 )
+@click.option(
+    "--annualization",
+    default="stocks",
+    show_default=True,
+    help="Trading days per year for Sharpe/Sortino/vol. "
+         "Use 'stocks' (252), 'crypto' (365), or an integer.",
+)
 @click.pass_context
-def cli(ctx, file_path, data_dir):
+def cli(ctx, file_path, data_dir, annualization):
     """survival-alpha — backtest hygiene for retail quants.
 
     \b
@@ -37,7 +44,7 @@ def cli(ctx, file_path, data_dir):
     """
     if ctx.invoked_subcommand is not None:
         return
-    _run_tearsheet(file_path, data_dir)
+    _run_tearsheet(file_path, data_dir, annualization)
 
 
 @cli.command()
@@ -47,18 +54,23 @@ def cli(ctx, file_path, data_dir):
     type=click.Path(exists=True, dir_okay=False, resolve_path=True),
 )
 @click.option("--data-dir", default=DEFAULT_DATA_DIR)
-def tearsheet(file_path, data_dir):
+@click.option("--annualization", default="stocks", show_default=True,
+              help="'stocks' (252), 'crypto' (365), or an integer.")
+def tearsheet(file_path, data_dir, annualization):
     """Run the Mode 1 tearsheet on a TradingView trade log."""
-    _run_tearsheet(file_path, data_dir)
+    _run_tearsheet(file_path, data_dir, annualization)
 
 
-def _run_tearsheet(file_path, data_dir):
+def _run_tearsheet(file_path, data_dir, annualization="stocks"):
     chosen = _pick_file(file_path, data_dir)
     if chosen is None:
         return
     click.echo(f"\nLoading {chosen}\n")
     trades = load_tradingview_csv(chosen)
-    metrics = compute_metrics(trades)
+    try:
+        metrics = compute_metrics(trades, annualization=annualization)
+    except ValueError as e:
+        raise click.BadParameter(str(e))
     checks = run_lightweight_checks(trades, metrics)
     print_tearsheet(Path(chosen).name, trades, metrics, checks)
 

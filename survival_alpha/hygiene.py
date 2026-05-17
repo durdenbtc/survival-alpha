@@ -142,7 +142,8 @@ def check_era_concentration(trades):
         )
     df = trades.copy()
     df["year"] = df["exit_date"].dt.year
-    yearly = df.groupby("year")["pnl_pct"].sum()
+    # Use dollar P&L (summing percentages of different bases is meaningless).
+    yearly = df.groupby("year")["pnl_usd"].sum()
     pos = int((yearly > 0).sum())
     total = int(len(yearly))
     pct = pos / total * 100 if total else 0
