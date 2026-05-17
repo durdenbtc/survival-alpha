@@ -1,0 +1,15 @@
+# Editor settings for the survival-alpha repo
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# README contains ASCII art whose alignment depends on trailing whitespace.
+# Tell editors to leave it alone.
+[README.md]
+trim_trailing_whitespace = false
