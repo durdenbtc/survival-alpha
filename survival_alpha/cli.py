@@ -10,28 +10,30 @@ from survival_alpha.metrics import compute_metrics
 from survival_alpha.report import print_tearsheet
 
 
-DEFAULT_DATA_DIR = Path("data")
+DEFAULT_DATA_DIR = "data"
 
 
 @click.group(invoke_without_command=True)
-@click.option(
-    "--file",
-    "-f",
+@click.argument(
     "file_path",
-    default=None,
-    type=click.Path(exists=True, dir_okay=False),
-    help="CSV file to analyze (skips auto-detection).",
+    required=False,
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
 )
 @click.option(
     "--data-dir",
-    default=str(DEFAULT_DATA_DIR),
-    help="Folder to scan for trade logs.",
+    default=DEFAULT_DATA_DIR,
+    help=f"Folder to scan for trade logs when no file is given (default: ./{DEFAULT_DATA_DIR}/).",
 )
 @click.pass_context
 def cli(ctx, file_path, data_dir):
     """survival-alpha — backtest hygiene for retail quants.
 
-    Run with no arguments to auto-detect a CSV in ./data/ and print a tearsheet.
+    \b
+    Run a tearsheet on a TradingView trade log:
+
+      sa my-strategy-log.csv          (point at a file directly)
+      sa                              (auto-detect a CSV in ./data/)
+      sa --data-dir my-folder         (scan a different folder)
     """
     if ctx.invoked_subcommand is not None:
         return
@@ -39,19 +41,12 @@ def cli(ctx, file_path, data_dir):
 
 
 @cli.command()
-@click.option(
-    "--file",
-    "-f",
+@click.argument(
     "file_path",
-    default=None,
-    type=click.Path(exists=True, dir_okay=False),
-    help="CSV file to analyze.",
+    required=False,
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
 )
-@click.option(
-    "--data-dir",
-    default=str(DEFAULT_DATA_DIR),
-    help="Folder to scan for trade logs.",
-)
+@click.option("--data-dir", default=DEFAULT_DATA_DIR)
 def tearsheet(file_path, data_dir):
     """Run the Mode 1 tearsheet on a TradingView trade log."""
     _run_tearsheet(file_path, data_dir)
@@ -69,20 +64,35 @@ def _run_tearsheet(file_path, data_dir):
 
 
 def _pick_file(file_path, data_dir):
+    """Resolve which CSV to analyze.
+
+    Priority: explicit file path > auto-detect single CSV in ./data/ >
+    interactive pick if multiple. If ./data/ doesn't exist we create it
+    and tell the user what to do next.
+    """
     if file_path:
         return file_path
     folder = Path(data_dir)
     if not folder.exists():
-        click.echo(f"No folder at {folder}/. Create it and drop a TradingView CSV in.")
+        folder.mkdir(parents=True, exist_ok=True)
+        click.echo(
+            f"\nCreated ./{folder}/ for you. Drop a TradingView CSV in there "
+            f"and re-run `sa`.\n\nOr point directly at a file:\n"
+            f"  sa path/to/your-log.csv\n"
+        )
         return None
     csvs = sorted(folder.glob("*.csv"))
     if not csvs:
-        click.echo(f"No CSV files in {folder}/. Drop a TradingView trade log in there.")
+        click.echo(
+            f"\nNo CSV files in ./{folder}/. Drop a TradingView trade log "
+            f"in there, or point directly at a file:\n"
+            f"  sa path/to/your-log.csv\n"
+        )
         return None
     if len(csvs) == 1:
-        click.echo(f"Auto-loading the only file in {folder}/: {csvs[0].name}")
+        click.echo(f"Auto-loading the only file in ./{folder}/: {csvs[0].name}")
         return str(csvs[0])
-    click.echo(f"\nMultiple files in {folder}/:")
+    click.echo(f"\nMultiple files in ./{folder}/:")
     for i, f in enumerate(csvs):
         click.echo(f"  [{i}] {f.name}")
     idx = click.prompt("\nPick one (number)", type=int)

@@ -3,8 +3,8 @@
 ```
 ██████╗ ██╗   ██╗██████╗ ██████╗ ███████╗███╗   ██╗██████╗ ████████╗ ██████╗
 ██╔══██╗██║   ██║██╔══██╗██╔══██╗██╔════╝████╗  ██║██╔══██╗╚══██╔══╝██╔════╝
-██║  ██║██║   ██║██████╔╝██║  ██║█████╗  ██╔██╗ ██║██████╔╝   ██║   ██║     
-██║  ██║██║   ██║██╔══██╗██║  ██║██╔══╝  ██║╚██╗██║██╔══██╗   ██║   ██║     
+██║  ██║██║   ██║██████╔╝██║  ██║█████╗  ██╔██╗ ██║██████╔╝   ██║   ██║
+██║  ██║██║   ██║██╔══██╗██║  ██║██╔══╝  ██║╚██╗██║██╔══██╗   ██║   ██║
 ██████╔╝╚██████╔╝██║  ██║██████╔╝███████╗██║ ╚████║██████╔╝   ██║   ╚██████╗
 ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝╚═════╝    ╚═╝    ╚═════╝
 ```
@@ -17,7 +17,7 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg?style=flat-square)](https://www.python.org/downloads/)
 [![Version](https://img.shields.io/badge/version-0.1.0-success.svg?style=flat-square)](https://github.com/durdenbtc/survival-alpha)
 
-[![Website](https://img.shields.io/badge/durdenbtc.com-FF9900?style=for-the-badge&logo=safari&logoColor=white)](https://durdenbtc.com)
+[![Website](https://img.shields.io/badge/durdenbtc.com-00E5D3?style=for-the-badge&logo=safari&logoColor=white)](https://durdenbtc.com)
 [![Substack](https://img.shields.io/badge/Substack-FF6719?style=for-the-badge&logo=substack&logoColor=white)](https://durdenbtc.substack.com/)
 [![X](https://img.shields.io/badge/@DurdenBTC-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/DurdenBTC)
 
@@ -27,15 +27,15 @@
 
 A lightweight Python CLI for **backtest hygiene**. Built for retail quants who care whether their numbers are real.
 
-Drop your TradingView trade log into a folder, run one command, get a real tearsheet — with sanity checks that catch the bugs your backtest is quietly hiding.
+Drop in a TradingView trade log, run one command, get a real tearsheet — with sanity checks that catch the bugs your backtest is quietly hiding.
 
 ## What it does (v0.1)
 
 **Mode 1 — TradingView trade log analysis.**
 
-- **Performance:** CAGR, Sharpe, Sortino, Calmar, Max DD, Time in Market
-- **Trade stats:** number of trades, win rate, expectancy, profit factor, avg trade duration
-- **Hygiene checks:** P&L reconciliation, suspicious Sharpe, profit concentration, same-bar fills, era concentration
+- **Performance:** total return, CAGR, Sharpe, Sortino, Calmar, max drawdown, max intra-trade DD, annual volatility, time in market
+- **Trade stats:** number of trades, win rate, expectancy, profit factor, avg / largest win, avg / largest loss, avg duration
+- **Hygiene checks:** trade durations, same-bar fills, P&L reconciliation, suspicious Sharpe, profit concentration, era concentration
 
 ---
 
@@ -57,17 +57,26 @@ You need Python 3.9+ and a tool called **pipx** (think of it as "App Store for P
 pipx install git+https://github.com/durdenbtc/survival-alpha.git
 ```
 
-### 3. Use it
+*(Coming soon: `pipx install survival-alpha` from PyPI.)*
+
+### 3. Run it
+
+Easiest — point `sa` at any TradingView trade log on disk:
 
 ```bash
-mkdir survival-alpha-data
-cd survival-alpha-data
-mkdir data
-# drop your TradingView CSV into the data/ folder, then:
+sa path/to/your-tradingview-log.csv
+```
+
+Or, if you want to batch through several CSVs at once, just run `sa` from any folder:
+
+```bash
 sa
 ```
 
-That's it. If `data/` contains exactly one CSV it auto-loads; if there are multiple it asks you which one to run.
+If there's no `data/` folder it creates one for you. Drop CSVs into `data/`, run `sa` again, and:
+
+- one CSV → it auto-loads
+- multiple CSVs → it asks you which one to run
 
 ---
 
@@ -75,18 +84,18 @@ That's it. If `data/` contains exactly one CSV it auto-loads; if there are multi
 
 1. Open your strategy on TradingView
 2. **Strategy Tester** → **List of Trades** tab
-3. Click the **download icon** in the top right → **Export to CSV**
-4. Drop the file into the `data/` folder next to where you're running `sa`
+3. Click the **download icon** (top right) → **Export to CSV**
+4. Hand the CSV to `sa` using either path above
 
 ---
 
 ## Other commands
 
 ```bash
-sa                                  # auto-detect a CSV in ./data/ and run the tearsheet
-sa --file path/to/some.csv          # skip auto-detection
-sa --data-dir path/to/folder        # scan a different folder
-sa tearsheet                        # explicit subcommand (same as `sa` with no args)
+sa                              # auto-detect a CSV in ./data/
+sa my-log.csv                   # load a specific file
+sa --data-dir path/to/folder    # scan a different folder
+sa --help                       # show all options
 ```
 
 ---
