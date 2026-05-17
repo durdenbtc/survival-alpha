@@ -40,3 +40,7 @@ htmlcov/
 # User-dropped trade logs (don't ship these to the repo)
 data/*.csv
 !data/.gitkeep
+
+# Local planning docs (not for the repo)
+v0_*_PLAN.md
+PLAN.md

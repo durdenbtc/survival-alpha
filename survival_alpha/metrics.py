@@ -8,6 +8,30 @@ TRADING_DAYS_PER_YEAR = 252
 CALENDAR_DAYS_PER_YEAR = 365.25
 
 
+def estimate_initial_capital(trades):
+    """Back out starting capital from TradingView's cumulative columns.
+
+    TradingView guarantees: cum_pnl_usd / (cum_pnl_pct / 100) == initial_capital
+    for every row that has both columns populated. This is more reliable than
+    the first trade's `size_value`, which TradingView rounds to 0 when the
+    entry price is sub-cent (e.g. BTC in 2010, micro-caps).
+
+    Fallbacks: first non-zero size_value -> TradingView default of 10000.
+    """
+    for _, row in trades.iterrows():
+        cum_usd = row.get("cum_pnl_usd")
+        cum_pct = row.get("cum_pnl_pct")
+        if pd.notna(cum_usd) and pd.notna(cum_pct) and cum_pct != 0:
+            cap = float(cum_usd) / (float(cum_pct) / 100.0)
+            if cap > 0:
+                return cap
+    for _, row in trades.iterrows():
+        sv = row.get("size_value")
+        if pd.notna(sv) and float(sv) > 0:
+            return float(sv)
+    return 10_000.0  # TradingView default
+
+
 def build_daily_equity_curve(trades):
     """Build a daily equity curve by distributing each trade's P&L
     pro-rata across the days it was open.
@@ -25,13 +49,14 @@ def build_daily_equity_curve(trades):
     start = trades["entry_date"].min().normalize()
     end = trades["exit_date"].max().normalize()
     dates = pd.date_range(start, end, freq="D")
-    initial_capital = float(trades.iloc[0]["size_value"])
+    initial_capital = estimate_initial_capital(trades)
     daily_pnl = pd.Series(0.0, index=dates)
     for _, t in trades.iterrows():
         d0 = t["entry_date"].normalize()
         d1 = t["exit_date"].normalize()
         n_days = max((d1 - d0).days, 1)
-        per_day = float(t["pnl_usd"]) / n_days
+        pnl = float(t["pnl_usd"]) if pd.notna(t["pnl_usd"]) else 0.0
+        per_day = pnl / n_days
         window = pd.date_range(d0 + pd.Timedelta(days=1), d1, freq="D")
         overlap = daily_pnl.index.intersection(window)
         daily_pnl.loc[overlap] += per_day
@@ -44,6 +69,48 @@ def _sharpe(daily_returns):
     if not s or s <= 0:
         return 0.0
     return float(daily_returns.mean() / s * np.sqrt(TRADING_DAYS_PER_YEAR))
+
+
+def compute_max_drawdown(trades, initial_capital):
+    """Max drawdown that includes intra-trade troughs.
+
+    For each trade we emit four synthetic equity events in chronological
+    order: entry, intra-trade extreme #1, intra-trade extreme #2, exit.
+    The ordering of the two extremes is inferred from the trade's outcome:
+
+      - Winning trades (pnl > 0) typically dip first, then recover.
+        Order: trough (entry + MAE) -> peak (entry + MFE)
+      - Losing trades (pnl <= 0) typically rally first, then collapse.
+        Order: peak (entry + MFE) -> trough (entry + MAE)
+
+    This is a heuristic, not a guarantee, but it produces a realistic
+    estimate without creating phantom peaks that future trades would
+    measure drawdown from. It always satisfies
+    |max_dd| >= max single-trade |MAE_pct|.
+    """
+    if trades.empty:
+        return 0.0
+    ordered = trades.sort_values("entry_date").reset_index(drop=True)
+    events = []
+    running_pnl = 0.0
+    for _, t in ordered.iterrows():
+        entry_eq = initial_capital + running_pnl
+        mfe = float(t["mfe_usd"]) if pd.notna(t.get("mfe_usd")) else 0.0
+        mae = float(t["mae_usd"]) if pd.notna(t.get("mae_usd")) else 0.0
+        pnl = float(t["pnl_usd"]) if pd.notna(t.get("pnl_usd")) else 0.0
+        events.append(entry_eq)
+        if pnl > 0:
+            events.append(entry_eq + mae)
+            events.append(entry_eq + mfe)
+        else:
+            events.append(entry_eq + mfe)
+            events.append(entry_eq + mae)
+        events.append(entry_eq + pnl)
+        running_pnl += pnl
+    s = pd.Series(events, dtype=float)
+    running_max = s.cummax()
+    dd = s / running_max - 1.0
+    return float(dd.min())
 
 
 def _sortino(daily_returns):
@@ -74,9 +141,8 @@ def compute_metrics(trades):
     sharpe = _sharpe(daily_returns)
     sortino = _sortino(daily_returns)
     annual_vol = float(daily_returns.std() * np.sqrt(TRADING_DAYS_PER_YEAR)) if len(daily_returns) else 0.0
-    running_max = equity.cummax()
-    drawdown = equity / running_max - 1
-    max_dd = float(drawdown.min()) if len(drawdown) else 0.0
+    initial_cap = estimate_initial_capital(trades)
+    max_dd = compute_max_drawdown(trades, initial_cap)
     calmar = cagr / abs(max_dd) if max_dd < 0 else 0.0
     total_days_in_market = float(trades["duration_days"].clip(lower=0).sum())
     total_calendar_days = max((end_date - start_date).days, 1)

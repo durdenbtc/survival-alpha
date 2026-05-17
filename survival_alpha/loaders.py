@@ -59,14 +59,14 @@ def load_tradingview_csv(path):
             "exit_price": merged["Price USD_exit"].astype(float),
             "size_qty": merged["Size (qty)_entry"].astype(float),
             "size_value": merged["Size (value)_entry"].astype(float),
-            "pnl_usd": merged["Net P&L USD_entry"].astype(float),
-            "pnl_pct": merged["Net P&L %_entry"].astype(float),
-            "mae_usd": merged["Adverse excursion USD_entry"].astype(float),
-            "mae_pct": merged["Adverse excursion %_entry"].astype(float),
-            "mfe_usd": merged["Favorable excursion USD_entry"].astype(float),
-            "mfe_pct": merged["Favorable excursion %_entry"].astype(float),
-            "cum_pnl_usd": merged["Cumulative P&L USD_entry"].astype(float),
-            "cum_pnl_pct": merged["Cumulative P&L %_entry"].astype(float),
+            "pnl_usd": pd.to_numeric(merged["Net P&L USD_entry"], errors="coerce"),
+            "pnl_pct": pd.to_numeric(merged["Net P&L %_entry"], errors="coerce"),
+            "mae_usd": pd.to_numeric(merged["Adverse excursion USD_entry"], errors="coerce"),
+            "mae_pct": pd.to_numeric(merged["Adverse excursion %_entry"], errors="coerce"),
+            "mfe_usd": pd.to_numeric(merged["Favorable excursion USD_entry"], errors="coerce"),
+            "mfe_pct": pd.to_numeric(merged["Favorable excursion %_entry"], errors="coerce"),
+            "cum_pnl_usd": pd.to_numeric(merged["Cumulative P&L USD_entry"], errors="coerce"),
+            "cum_pnl_pct": pd.to_numeric(merged["Cumulative P&L %_entry"], errors="coerce"),
         }
     )
     out["duration_days"] = (out["exit_date"] - out["entry_date"]).dt.days
