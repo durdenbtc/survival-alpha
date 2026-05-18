@@ -15,7 +15,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg?style=flat-square)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-43%20passing-brightgreen.svg?style=flat-square)](tests/)
+[![Tests](https://img.shields.io/badge/tests-66%20passing-brightgreen.svg?style=flat-square)](tests/)
 [![Version](https://img.shields.io/badge/version-0.1.0-success.svg?style=flat-square)](https://github.com/durdenbtc/survival-alpha)
 
 [![Website](https://img.shields.io/badge/durdenbtc.com-00E5D3?style=for-the-badge&logo=safari&logoColor=white)](https://durdenbtc.com)
@@ -63,22 +63,27 @@ pipx install git+https://github.com/durdenbtc/survival-alpha.git
 
 ### 3. Run it
 
-Easiest — point `sa` at any TradingView trade log on disk:
+Two modes ship in v0.1:
+
+**Mode 1 — analyze a TradingView trade log:**
 
 ```bash
-sa path/to/your-tradingview-log.csv
+sa                                  # auto-detect a CSV in ./data/
+sa --file path/to/your-log.csv      # explicit file
+sa tearsheet path/to/your-log.csv   # same thing, explicit subcommand
 ```
 
-Or, if you want to batch through several CSVs at once, just run `sa` from any folder:
+If there's no `data/` folder it creates one for you. Drop CSVs in, re-run `sa`. One CSV auto-loads; multiple CSVs prompts you to pick.
+
+**Mode 2 — translate a Pine Script SMA-crossover strategy to Python (v0.2):**
 
 ```bash
-sa
+sa convert foo.pine                       # translate only
+sa convert foo.pine -d btc.csv            # translate + backtest
+sa convert foo.pine -d btc.csv -r tv.csv  # translate + backtest + diff vs TradingView
 ```
 
-If there's no `data/` folder it creates one for you. Drop CSVs into `data/`, run `sa` again, and:
-
-- one CSV → it auto-loads
-- multiple CSVs → it asks you which one to run
+The generated Python conforms to the `def strategy(data) -> pd.Series` contract and is dropped into `./generated/`.
 
 ---
 
@@ -126,11 +131,14 @@ Trades  60
 ## Other commands
 
 ```bash
-sa                              # auto-detect a CSV in ./data/
-sa my-log.csv                   # load a specific file
-sa --data-dir path/to/folder    # scan a different folder
-sa --annualization crypto       # annualize Sharpe/Sortino/vol with 365 days
-sa --help                       # show all options
+sa                                  # auto-detect a CSV in ./data/
+sa --file my-log.csv                # explicit file
+sa tearsheet my-log.csv             # explicit subcommand form
+sa convert my-strategy.pine         # Pine → Python translator
+sa --data-dir path/to/folder        # scan a different folder
+sa --annualization crypto           # annualize with 365 d/y instead of 252
+sa --help                           # all options
+sa convert --help                   # converter-specific options
 ```
 
 ---
@@ -171,7 +179,7 @@ Ratio between them is always `sqrt(365/252) ≈ 1.204`.
 | Version | Feature |
 |---|---|
 | **v0.1** | Mode 1 — trade log tearsheet + lightweight hygiene ← *you are here* |
-| **v0.2** | Pine Script → Python converter (LLM-assisted) |
+| **v0.2** | Pine Script → Python converter — SMA crossover rule-based; LLM coming in v0.2.1 |
 | **v0.3** | Mode 2 — signal + price series, full repaint detector |
 | **v0.4** | Mode 3 — strategy-as-function, parameter sweep, sub-window forward tests |
 | **v1.0** | Survival-Alpha Score, regime-conditional analysis |
@@ -196,10 +204,10 @@ pytest
 You should see:
 
 ```
-============================== 43 passed in 0.46s ==============================
+============================== 66 passed in 1.20s ==============================
 ```
 
-The test suite covers the loader, all the metrics math (CAGR, Max DD with intra-trade troughs, Sharpe scaling under different annualization bases, profit-factor edge cases, initial-capital derivation), and the hygiene checks.
+The test suite covers the loader, all the metrics math (CAGR, Max DD with intra-trade troughs, Sharpe scaling under different annualization bases, profit-factor edge cases, initial-capital derivation), the hygiene checks, **and the v0.2 converter pipeline** (Pine parser, rule-based translator, strategy runner, trade differ).
 
 If PowerShell blocks activation with an execution-policy error, run this once in admin PowerShell: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 

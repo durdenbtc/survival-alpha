@@ -1,0 +1,11 @@
+//@version=6
+strategy("SMA Cross 50/200", overlay=true)
+
+fastSma = ta.sma(close, 50)
+slowSma = ta.sma(close, 200)
+
+if ta.crossover(fastSma, slowSma)
+    strategy.entry("Long", strategy.long)
+
+if ta.crossunder(fastSma, slowSma)
+    strategy.close("Long")
