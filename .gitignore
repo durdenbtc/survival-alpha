@@ -44,3 +44,10 @@ data/*.csv
 # Local planning docs (not for the repo)
 v0_*_PLAN.md
 PLAN.md
+
+# User-dropped converter inputs (don't ship these to the repo)
+convert/*.csv
+convert/*.pine
+
+# Generated Python from `sa convert`
+generated/

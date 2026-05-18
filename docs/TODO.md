@@ -1,5 +1,18 @@
 # survival-alpha — TODO
 
+## ✅ Shipped in v0.2.0
+
+- **Rule-based Pine → Python translator** for SMA crossover strategies
+  - Pre-flight gate rejects unsupported constructs with clear errors
+  - Template-based code generation (no LLM yet — coming in v0.2.2)
+- **`sa convert` CLI subcommand** with auto-detection from `./convert/`
+- **Strategy runner** that executes `def strategy(data) -> pd.Series` against OHLC data
+- **Trade differ** with `--tolerance N` flag for off-by-N-day matching across data feeds
+- **23 new tests** for the converter pipeline (parser, translator, runner, differ, end-to-end)
+- Verified end-to-end: SA-TEST 01 SMA(14/28) Pine → Python → 80/80 trades, 93.8% match against TradingView's COINBASE:BTCUSD reference with ±1d tolerance
+
+---
+
 The audit punch list from before v0.1 was published, minus the items already
 fixed. Pick anything from here and open a PR. Items are roughly ordered by
 priority within each section.

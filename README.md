@@ -16,7 +16,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg?style=flat-square)](https://www.python.org/downloads/)
 [![Tests](https://img.shields.io/badge/tests-66%20passing-brightgreen.svg?style=flat-square)](tests/)
-[![Version](https://img.shields.io/badge/version-0.1.0-success.svg?style=flat-square)](https://github.com/durdenbtc/survival-alpha)
+[![Version](https://img.shields.io/badge/version-0.2.0-success.svg?style=flat-square)](https://github.com/durdenbtc/survival-alpha)
 
 [![Website](https://img.shields.io/badge/durdenbtc.com-00E5D3?style=for-the-badge&logo=safari&logoColor=white)](https://durdenbtc.com)
 [![Substack](https://img.shields.io/badge/Substack-FF6719?style=for-the-badge&logo=substack&logoColor=white)](https://durdenbtc.substack.com/)
@@ -61,29 +61,44 @@ pipx install git+https://github.com/durdenbtc/survival-alpha.git
 
 *(Coming soon: `pipx install survival-alpha` from PyPI.)*
 
-### 3. Run it
+### 3. Drop your files in `./data/` or `./convert/`
 
-Two modes ship in v0.1:
+`survival-alpha` looks for files relative to whatever folder you're in when you run it. The simplest setup: clone the repo, `cd` into it, and drop files into the pre-made folders.
 
-**Mode 1 — analyze a TradingView trade log:**
-
-```bash
-sa                                  # auto-detect a CSV in ./data/
-sa --file path/to/your-log.csv      # explicit file
-sa tearsheet path/to/your-log.csv   # same thing, explicit subcommand
+```
+survival-alpha/                      ← cd here
+├── data/                            ← Mode 1 — TradingView trade logs
+│   └── my-strategy-log.csv          (drop your tearsheet inputs here)
+└── convert/                         ← Mode 2 — Pine → Python pipeline
+    ├── my-strategy.pine             ← the Pine source
+    ├── btc_daily.csv                ← OHLC price data (yfinance Date/Open/High/Low/Close)
+    └── tv-trade-log.csv             ← (optional) TradingView reference log
 ```
 
-If there's no `data/` folder it creates one for you. Drop CSVs in, re-run `sa`. One CSV auto-loads; multiple CSVs prompts you to pick.
+Both folders are gitignored for trade-log / CSV / Pine contents, so your strategy files stay local.
 
-**Mode 2 — translate a Pine Script SMA-crossover strategy to Python (v0.2):**
+*Working from a different folder?* Same rule — the CLI reads from `./data/` and `./convert/` **relative to your current directory**. It auto-creates both folders the first time you run it, so `mkdir somewhere && cd somewhere && sa convert` works too.
+
+### 4. CLI cheat sheet
 
 ```bash
-sa convert foo.pine                       # translate only
+# ───────── Mode 1 ─ tearsheet on a TradingView trade log ─────────
+sa                                # auto-detect a CSV in ./data/
+sa --file my-log.csv              # explicit file
+sa tearsheet my-log.csv           # same, explicit subcommand
+sa --annualization crypto         # use 365 trading days/year (BTC, ETH...)
+
+# ───────── Mode 2 ─ Pine Script → Python converter (v0.2) ────────
+sa convert                                # auto-detect .pine + ohlc + reference in ./convert/
+sa convert foo.pine                       # translate only (no backtest)
 sa convert foo.pine -d btc.csv            # translate + backtest
 sa convert foo.pine -d btc.csv -r tv.csv  # translate + backtest + diff vs TradingView
+
+sa --help                         # all global options
+sa convert --help                 # all converter options
 ```
 
-The generated Python conforms to the `def strategy(data) -> pd.Series` contract and is dropped into `./generated/`.
+When you run `sa convert` with no args, it scans `./convert/` and figures out which CSV is OHLC data (by columns: `Open/High/Low/Close`) and which is the TradingView reference (by columns: `Trade #`). The generated Python lands in `./generated/`.
 
 ---
 
@@ -128,18 +143,18 @@ Trades  60
 
 ---
 
-## Other commands
+## Less-common options
 
 ```bash
-sa                                  # auto-detect a CSV in ./data/
-sa --file my-log.csv                # explicit file
-sa tearsheet my-log.csv             # explicit subcommand form
-sa convert my-strategy.pine         # Pine → Python translator
-sa --data-dir path/to/folder        # scan a different folder
-sa --annualization crypto           # annualize with 365 d/y instead of 252
-sa --help                           # all options
-sa convert --help                   # converter-specific options
+sa --data-dir path/to/folder        # scan a folder other than ./data/
+sa convert --convert-dir folder/    # scan a folder other than ./convert/
+sa convert -o where/to/write/       # change generated-Python output dir
+sa convert --commission-pct 0.1     # match a TradingView commission setting
+sa convert --order-size-pct 50      # half-position sizing
+sa convert --initial-capital 1000   # smaller account
 ```
+
+See [`docs/TODO.md`](docs/TODO.md) for upcoming features (start-date filtering, regime-conditional analysis, etc).
 
 ---
 
@@ -176,13 +191,15 @@ Ratio between them is always `sqrt(365/252) ≈ 1.204`.
 
 ## Roadmap
 
-| Version | Feature |
-|---|---|
-| **v0.1** | Mode 1 — trade log tearsheet + lightweight hygiene ← *you are here* |
-| **v0.2** | Pine Script → Python converter — SMA crossover rule-based; LLM coming in v0.2.1 |
-| **v0.3** | Mode 2 — signal + price series, full repaint detector |
-| **v0.4** | Mode 3 — strategy-as-function, parameter sweep, sub-window forward tests |
-| **v1.0** | Survival-Alpha Score, regime-conditional analysis |
+| Version | Status | Feature |
+|---|---|---|
+| **v0.1** | ✅ shipped | Mode 1 — trade log tearsheet + lightweight hygiene |
+| **v0.2** | ✅ shipped | Pine Script → Python converter — rule-based SMA crossover, trade-diff harness, tolerance flag |
+| **v0.2.1** | 🚧 next | More indicators (EMA, RSI, MACD, ATR, Bollinger) ← *you are here* |
+| **v0.2.2** | 📅 planned | LLM-assisted translator (Ollama + Qwen2.5-Coder) for constructs outside the rule-based subset |
+| **v0.3** | 📅 planned | Mode 2 — signal + price series, full repaint detector |
+| **v0.4** | 📅 planned | Mode 3 — strategy-as-function, parameter sweep, sub-window forward tests |
+| **v1.0** | 📅 planned | Survival-Alpha Score, regime-conditional analysis |
 
 See [`docs/TODO.md`](docs/TODO.md) for the granular list of follow-ups, feature requests, and known limitations.
 

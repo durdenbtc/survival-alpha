@@ -66,11 +66,17 @@ def render_backtest_panel(console, data_path, trades, n_bars, start, end):
 
 
 def render_diff_panel(console, diff):
+    tol_note = f" (±{diff.tolerance_days}d tolerance)" if diff.tolerance_days else ""
     if diff.is_perfect_match:
         body = Text()
         body.append("✅  ", style=GREEN)
-        body.append(f"{diff.matched} / {diff.matched} trades match exactly.",
+        body.append(f"{diff.matched} / {diff.matched} trades match{tol_note}.",
                     style=f"bold {GREEN}")
+        if diff.fuzzy_matched:
+            body.append(
+                f"\n   {len(diff.fuzzy_matched)} of those matched within tolerance, not exactly.",
+                style="dim",
+            )
         body.append("\n\nTranslation verified against the reference TradingView log.",
                     style="dim")
         border = GREEN
@@ -80,7 +86,7 @@ def render_diff_panel(console, diff):
         color = AMBER if diff.matched > 0 else RED
         body.append(f"{glyph}  ", style=color)
         body.append(
-            f"Matched {diff.matched}  ·  generated={diff.total_generated}  ·  reference={diff.total_reference}\n",
+            f"Matched {diff.matched}{tol_note}  ·  generated={diff.total_generated}  ·  reference={diff.total_reference}\n",
             style=f"bold {color}",
         )
         body.append(f"   match rate: {diff.match_pct:.1f}%\n\n", style="dim")

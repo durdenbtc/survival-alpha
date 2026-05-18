@@ -85,10 +85,14 @@ def tearsheet(file_path, data_dir, annualization):
     _run_tearsheet(file_path, data_dir, annualization)
 
 
+DEFAULT_CONVERT_DIR = "convert"
+
+
 @cli.command()
 @click.argument(
     "pine_path",
     type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    required=False,
 )
 @click.option(
     "--data", "-d", "data_path",
@@ -103,6 +107,12 @@ def tearsheet(file_path, data_dir, annualization):
     help="TradingView trade-log CSV to diff the generated trades against.",
 )
 @click.option(
+    "--convert-dir",
+    default=DEFAULT_CONVERT_DIR,
+    show_default=True,
+    help="Folder to auto-detect pine/ohlc/reference files from when no flags given.",
+)
+@click.option(
     "--output", "-o", "output_dir",
     default="generated",
     show_default=True,
@@ -113,26 +123,92 @@ def tearsheet(file_path, data_dir, annualization):
               help="Position size as percent of current equity.")
 @click.option("--commission-pct", type=float, default=0.0, show_default=True,
               help="Commission per side as a percent of trade size.")
-def convert(pine_path, data_path, reference_path, output_dir,
-            initial_capital, order_size_pct, commission_pct):
+@click.option("--tolerance", "tolerance_days", type=int, default=0, show_default=True,
+              help="Diff tolerance in days. 0 = strict; 1 = allow off-by-1-day matches "
+                   "(useful when reference and OHLC come from different data feeds).")
+def convert(pine_path, data_path, reference_path, convert_dir, output_dir,
+            initial_capital, order_size_pct, commission_pct, tolerance_days):
     """Translate a Pine Script SMA crossover strategy to Python.
 
     \b
-    Three modes:
+    Easiest workflow: drop files into ./convert/ and run `sa convert`:
+      ./convert/my_strategy.pine
+      ./convert/btc_ohlc.csv         (yfinance Date/Open/High/Low/Close)
+      ./convert/tv_trades.csv        (TradingView trade log -- optional)
+
+    \b
+    Or use explicit paths:
       sa convert foo.pine                       (translate only)
       sa convert foo.pine -d btc.csv            (translate + backtest)
       sa convert foo.pine -d btc.csv -r tv.csv  (translate + backtest + diff)
     """
     console = Console()
     print_brand_header(console)
+
+    # If no explicit pine path, auto-detect everything from ./convert/.
+    if pine_path is None:
+        pine_path, data_path, reference_path = _autodetect_convert_dir(
+            convert_dir, data_path, reference_path,
+        )
+
     _run_convert(
         console, Path(pine_path), data_path, reference_path, output_dir,
-        initial_capital, order_size_pct, commission_pct,
+        initial_capital, order_size_pct, commission_pct, tolerance_days,
     )
 
 
+def _autodetect_convert_dir(convert_dir, data_path, reference_path):
+    """Scan ./convert/ for a .pine file plus OHLC and reference CSVs.
+
+    Distinguishes OHLC from reference by inspecting the CSV header:
+      - reference: contains 'Trade #'
+      - OHLC:      contains Open/High/Low/Close
+    Returns (pine_path, data_path, reference_path) -- any of the latter two
+    that the caller already provided is left alone (explicit > autodetect).
+    """
+    folder = Path(convert_dir)
+    if not folder.exists():
+        folder.mkdir(parents=True, exist_ok=True)
+        raise click.ClickException(
+            f"Created ./{folder}/ for you. Drop these in and re-run `sa convert`:\n"
+            f"  - your .pine file (the strategy)\n"
+            f"  - an OHLC price CSV (yfinance Date/Open/High/Low/Close)\n"
+            f"  - (optional) a TradingView trade-log CSV to diff against"
+        )
+
+    pines = sorted(folder.glob("*.pine"))
+    if not pines:
+        raise click.ClickException(
+            f"No .pine file in ./{folder}/. Drop one in, then re-run `sa convert`."
+        )
+    if len(pines) > 1:
+        names = ", ".join(p.name for p in pines)
+        raise click.ClickException(
+            f"Multiple .pine files in ./{folder}/ ({names}). "
+            f"Pass one explicitly: sa convert ./{folder}/your.pine"
+        )
+    pine_path = str(pines[0])
+
+    # Only autodetect data/ref if user didn't pass them explicitly.
+    ohlc_found = data_path
+    ref_found = reference_path
+    if ohlc_found is None or ref_found is None:
+        for csv in sorted(folder.glob("*.csv")):
+            try:
+                header = pd.read_csv(csv, nrows=0, encoding="utf-8-sig").columns.tolist()
+            except Exception:
+                continue
+            header = [h.strip() for h in header]
+            if "Trade #" in header and ref_found is None:
+                ref_found = str(csv)
+            elif {"Open", "High", "Low", "Close"}.issubset(set(header)) and ohlc_found is None:
+                ohlc_found = str(csv)
+
+    return pine_path, ohlc_found, ref_found
+
+
 def _run_convert(console, pine_path, data_path, reference_path, output_dir,
-                 initial_capital, order_size_pct, commission_pct):
+                 initial_capital, order_size_pct, commission_pct, tolerance_days=0):
     # 1. Parse
     try:
         spec = parse_sma_crossover(pine_path.read_text(encoding="utf-8"))
@@ -182,7 +258,7 @@ def _run_convert(console, pine_path, data_path, reference_path, output_dir,
         return
 
     ref = load_tradingview_csv(reference_path)
-    diff = diff_trades(trades, ref)
+    diff = diff_trades(trades, ref, tolerance_days=tolerance_days)
     render_diff_panel(console, diff)
 
 

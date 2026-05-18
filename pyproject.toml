@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "survival-alpha"
-version = "0.1.0"
+version = "0.2.0"
 description = "Backtest hygiene for retail quants. Your backtest is lying to you. This library catches it."
 readme = "README.md"
 requires-python = ">=3.9"

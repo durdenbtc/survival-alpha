@@ -62,14 +62,35 @@ def parse_sma_crossover(source: str) -> SmaCrossSpec:
     # Strip line comments for the rest of the analysis.
     src = re.sub(r"//.*?$", "", source, flags=re.MULTILINE)
 
-    # Must contain a strategy("name") declaration.
-    m = re.search(r'strategy\s*\(\s*"([^"]*)"', src)
-    if not m:
+    # Must contain a strategy(...) declaration.
+    strat_match = re.search(r"strategy\s*\(", src)
+    if not strat_match:
         raise ParseError(
-            "Source must contain `strategy(\"...\")`. Indicator scripts "
+            "Source must contain `strategy(...)`. Indicator scripts "
             "are not supported in v0.2.0."
         )
-    strategy_name = m.group(1)
+    # Extract the parenthesized args block by paren-counting (handles
+    # multi-line declarations and nested parens).
+    pos, depth = strat_match.end(), 1
+    while pos < len(src) and depth:
+        if src[pos] == "(":
+            depth += 1
+        elif src[pos] == ")":
+            depth -= 1
+        pos += 1
+    if depth:
+        raise ParseError("Unterminated strategy(...) call.")
+    strat_args = src[strat_match.end():pos - 1]
+
+    # Find strategy name: first quoted string anywhere in the args block.
+    # Handles both `strategy("name", ...)` and `strategy(title = "name", ...)`.
+    name_m = re.search(r'"([^"]*)"', strat_args)
+    if not name_m:
+        raise ParseError(
+            "Couldn\u2019t find the strategy name. Use `strategy(\"name\", ...)` "
+            "or `strategy(title=\"name\", ...)`."
+        )
+    strategy_name = name_m.group(1)
 
     # Reject forbidden constructs before deeper parsing -- gives the user
     # the most useful error message.
